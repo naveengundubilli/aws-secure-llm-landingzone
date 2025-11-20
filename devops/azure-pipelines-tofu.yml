@@ -1,0 +1,82 @@
+trigger:
+  branches:
+    include:
+      - main
+      - dev
+
+variables:
+  - name: TF_WORKING_DIR
+    value: infra
+  - name: ENVIRONMENT
+    value: dev
+  - name: TOFU_VERSION
+    value: 1.8.0
+
+stages:
+  - stage: Validate
+    displayName: "OpenTofu validate & plan"
+    jobs:
+      - job: Validate
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - task: Bash@3
+            displayName: "Install OpenTofu"
+            inputs:
+              targetType: inline
+              script: |
+                sudo apt-get update -y
+                sudo apt-get install -y wget unzip
+                wget https://github.com/opentofu/opentofu/releases/download/v$(TOFU_VERSION)/tofu_$(TOFU_VERSION)_linux_amd64.zip
+                unzip tofu_$(TOFU_VERSION)_linux_amd64.zip
+                sudo mv tofu /usr/local/bin/
+
+          - task: Bash@3
+            displayName: "OpenTofu init"
+            inputs:
+              targetType: inline
+              workingDirectory: "$(TF_WORKING_DIR)"
+              script: |
+                tofu init
+
+          - task: Bash@3
+            displayName: "OpenTofu plan"
+            inputs:
+              targetType: inline
+              workingDirectory: "$(TF_WORKING_DIR)"
+              script: |
+                tofu plan                   -var "environment=$(ENVIRONMENT)"                   -var-file="../environments/$(ENVIRONMENT)/terraform.tfvars"                   -out=tfplan
+
+          - publish: infra/tfplan
+            artifact: tfplan
+
+  - stage: Apply
+    displayName: "OpenTofu apply"
+    dependsOn: Validate
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: Apply
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - download: current
+            artifact: tfplan
+
+          - task: Bash@3
+            displayName: "Install OpenTofu"
+            inputs:
+              targetType: inline
+              script: |
+                sudo apt-get update -y
+                sudo apt-get install -y wget unzip
+                wget https://github.com/opentofu/opentofu/releases/download/v$(TOFU_VERSION)/tofu_$(TOFU_VERSION)_linux_amd64.zip
+                unzip tofu_$(TOFU_VERSION)_linux_amd64.zip
+                sudo mv tofu /usr/local/bin/
+
+          - task: Bash@3
+            displayName: "OpenTofu apply"
+            inputs:
+              targetType: inline
+              workingDirectory: "$(TF_WORKING_DIR)"
+              script: |
+                tofu apply "tfplan"
