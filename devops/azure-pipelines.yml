@@ -1,0 +1,90 @@
+trigger:
+  branches:
+    include:
+      - main
+      - dev
+
+variables:
+  - name: TF_WORKING_DIR
+    value: infra
+  - name: ENVIRONMENT
+    value: dev
+
+stages:
+  - stage: Validate
+    displayName: "Terraform validate & plan"
+    jobs:
+      - job: Validate
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - task: Bash@3
+            displayName: "Install Terraform"
+            inputs:
+              targetType: inline
+              script: |
+                sudo apt-get update -y
+                sudo apt-get install -y wget unzip
+                TF_VERSION=1.9.5
+                wget https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
+                unzip terraform_${TF_VERSION}_linux_amd64.zip
+                sudo mv terraform /usr/local/bin/
+
+          - task: Bash@3
+            displayName: "Terraform init"
+            inputs:
+              targetType: inline
+              workingDirectory: "$(TF_WORKING_DIR)"
+              script: |
+                terraform init
+
+          - task: Bash@3
+            displayName: "Terraform validate"
+            inputs:
+              targetType: inline
+              workingDirectory: "$(TF_WORKING_DIR)"
+              script: |
+                terraform validate
+
+          - task: Bash@3
+            displayName: "Terraform plan"
+            inputs:
+              targetType: inline
+              workingDirectory: "$(TF_WORKING_DIR)"
+              script: |
+                terraform plan                   -var "environment=$(ENVIRONMENT)"                   -var-file="../environments/$(ENVIRONMENT)/terraform.tfvars"                   -out=tfplan
+
+          - publish: infra/tfplan
+            artifact: tfplan
+
+  - stage: Apply
+    displayName: "Terraform apply"
+    dependsOn: Validate
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: Apply
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - download: current
+            artifact: tfplan
+
+          - task: Bash@3
+            displayName: "Install Terraform"
+            inputs:
+              targetType: inline
+              script: |
+                sudo apt-get update -y
+                sudo apt-get install -y wget unzip
+                TF_VERSION=1.9.5
+                wget https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
+                unzip terraform_${TF_VERSION}_linux_amd64.zip
+                sudo mv terraform /usr/local/bin/
+
+          - task: Bash@3
+            displayName: "Terraform apply"
+            inputs:
+              targetType: inline
+              workingDirectory: "$(TF_WORKING_DIR)"
+              script: |
+                terraform apply "tfplan"
