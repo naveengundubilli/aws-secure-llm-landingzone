@@ -1,73 +1,28 @@
-module "vpc" {
-  source = "./modules/vpc"
+resource "aws_servicecatalog_portfolio" "onboarding" {
+  name          = "${var.project_name}-${var.environment}-onboarding-portfolio"
+  provider_name = "Platform Engineering"
+  description   = "Standardised onboarding for LLM workloads."
 
-  vpc_cidr            = var.vpc_cidr
-  project_name        = var.project_name
-  environment         = var.environment
-  tags                = local.vpc_tags
+  tags = var.tags
 }
 
-module "iam" {
-  source = "./modules/iam"
+resource "aws_servicecatalog_product" "vpc_baseline" {
+  name         = "${var.project_name}-${var.environment}-vpc-baseline"
+  owner        = "Platform Engineering"
+  product_type = "CLOUD_FORMATION_TEMPLATE"
 
-  project_name = var.project_name
-  environment  = var.environment
-  tags         = local.iam_tags
+  provisioning_artifact_parameters {
+    name = "v1"
+    type = "CLOUD_FORMATION_TEMPLATE"
+    info = {
+      LoadTemplateFromURL = "https://example.com/vpc-baseline-template.yaml"
+    }
+  }
+
+  tags = var.tags
 }
 
-module "org_scp" {
-  source = "./modules/org_scp"
-
-  org_master_account_id = var.org_master_account_id
-  tags                  = local.iam_tags
-}
-
-module "logging" {
-  source = "./modules/logging"
-
-  project_name  = var.project_name
-  environment   = var.environment
-  vpc_id        = module.vpc.vpc_id
-  flow_log_role = module.iam.vpc_flow_logs_role_arn
-  tags          = local.logging_tags
-}
-
-module "monitoring" {
-  source = "./modules/monitoring"
-
-  project_name = var.project_name
-  environment  = var.environment
-  tags         = local.monitoring_tags
-}
-
-module "connectivity" {
-  source = "./modules/connectivity"
-
-  project_name       = var.project_name
-  environment        = var.environment
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
-  tags               = local.vpc_tags
-}
-
-module "eks_litellm" {
-  source = "./modules/eks_litellm"
-
-  project_name           = var.project_name
-  environment            = var.environment
-  vpc_id                 = module.vpc.vpc_id
-  private_subnet_ids     = module.vpc.private_subnet_ids
-  eks_version            = var.eks_version
-  eks_node_instance_type = var.eks_node_instance_type
-  eks_node_min_size      = var.eks_node_min_size
-  eks_node_max_size      = var.eks_node_max_size
-  tags                   = local.litellm_tags
-}
-
-module "service_catalog" {
-  source = "./modules/service_catalog"
-
-  project_name = var.project_name
-  environment  = var.environment
-  tags         = local.base_tags
+resource "aws_servicecatalog_portfolio_product_association" "assoc" {
+  portfolio_id = aws_servicecatalog_portfolio.onboarding.id
+  product_id   = aws_servicecatalog_product.vpc_baseline.id
 }

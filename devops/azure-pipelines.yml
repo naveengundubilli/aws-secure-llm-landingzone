@@ -9,6 +9,8 @@ variables:
     value: infra
   - name: ENVIRONMENT
     value: dev
+  - name: TF_VERSION
+    value: 1.14.0
 
 stages:
   - stage: Validate
@@ -25,9 +27,8 @@ stages:
               script: |
                 sudo apt-get update -y
                 sudo apt-get install -y wget unzip
-                TF_VERSION=1.9.5
-                wget https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
-                unzip terraform_${TF_VERSION}_linux_amd64.zip
+                wget https://releases.hashicorp.com/terraform/$(TF_VERSION)/terraform_$(TF_VERSION)_linux_amd64.zip
+                unzip terraform_$(TF_VERSION)_linux_amd64.zip
                 sudo mv terraform /usr/local/bin/
 
           - task: Bash@3
@@ -52,7 +53,7 @@ stages:
               targetType: inline
               workingDirectory: "$(TF_WORKING_DIR)"
               script: |
-                terraform plan                   -var "environment=$(ENVIRONMENT)"                   -var-file="../environments/$(ENVIRONMENT)/terraform.tfvars"                   -out=tfplan
+                terraform plan                       -var "environment=$(ENVIRONMENT)"                       -var-file="../environments/$(ENVIRONMENT)/terraform.tfvars"                       -out=tfplan
 
           - publish: infra/tfplan
             artifact: tfplan
@@ -76,9 +77,8 @@ stages:
               script: |
                 sudo apt-get update -y
                 sudo apt-get install -y wget unzip
-                TF_VERSION=1.9.5
-                wget https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
-                unzip terraform_${TF_VERSION}_linux_amd64.zip
+                wget https://releases.hashicorp.com/terraform/$(TF_VERSION)/terraform_$(TF_VERSION)_linux_amd64.zip
+                unzip terraform_$(TF_VERSION)_linux_amd64.zip
                 sudo mv terraform /usr/local/bin/
 
           - task: Bash@3
