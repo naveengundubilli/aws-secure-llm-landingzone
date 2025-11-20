@@ -1,7 +1,7 @@
 # AWS Secure LLM Landing Zone (EKS + LiteLLM)
 
 A fully automated, secure-by-design AWS landing zone for internal LLM workloads.  
-This project demonstrates enterprise-grade IaC, Kubernetes, DevOps automation, and ISM-aligned architectures using **strict version-locked Terraform**.
+This project demonstrates enterprise-grade IaC, Kubernetes, DevOps automation, and ISM-aligned architectures using **strict version-locked Terraform**, with optional **OpenTofu** support.
 
 ---
 
@@ -38,7 +38,7 @@ This project demonstrates enterprise-grade IaC, Kubernetes, DevOps automation, a
   - Terraform: **1.14.0**
   - AWS provider: **6.21.0**
   - Kubernetes provider: **2.38.0**
-- Designed for OIDC or service connection
+- Optional **OpenTofu** pipeline using the same templates
 
 ### 🧰 Service Catalog / Onboarding
 - Portfolio + product for repeatable onboarding  
@@ -46,16 +46,16 @@ This project demonstrates enterprise-grade IaC, Kubernetes, DevOps automation, a
 
 ---
 
-## 📦 Repository Structure
+## 📦 Repository Structure (recommended)
 
-```
+```text
 aws-secure-llm-landingzone/
   README.md
   environments/
     dev/terraform.tfvars
     prod/terraform.tfvars
   infra/
-    backend.tf
+    backend.tf          # Strict Terraform version & provider locking
     providers.tf
     variables.tf
     tagging.tf
@@ -71,20 +71,21 @@ aws-secure-llm-landingzone/
       eks_litellm/
       service_catalog/
   devops/
-    azure-pipelines.yml
+    azure-pipelines.yml         # Terraform pipeline
+    azure-pipelines-tofu.yml    # OpenTofu pipeline (optional)
 ```
 
 ---
 
-## 📌 Version Locking (Latest Stable)
+## 📌 Version Locking (Terraform path)
 
 | Component              | Version     | Status           |
 |-----------------------|-------------|------------------|
-| Terraform CLI         | **1.14.0**  | Latest stable    |
-| AWS Provider          | **6.21.0**  | Latest stable    |
-| Kubernetes Provider   | **2.38.0**  | Latest stable    |
+| Terraform CLI         | **1.14.0**  | Pinned           |
+| AWS Provider          | **6.21.0**  | Pinned           |
+| Kubernetes Provider   | **2.38.0**  | Pinned           |
 
-Pinned using:
+Pinned via `infra/backend.tf`:
 
 ```hcl
 terraform {
@@ -105,21 +106,16 @@ terraform {
 
 ---
 
-## ▶️ Running Locally
+## ▶️ Running with Terraform
 
 ### 1. Install Terraform 1.14.0
 
-Download from:
-
-https://releases.hashicorp.com/terraform/1.14.0/
-
-Validate installation:
+Download from HashiCorp releases and verify:
 
 ```bash
 terraform version
+# Terraform v1.14.0
 ```
-
----
 
 ### 2. Configure AWS credentials
 
@@ -128,28 +124,18 @@ export AWS_PROFILE=landingzone-dev
 export AWS_REGION=ap-southeast-2
 ```
 
----
-
-### 3. Initialise Terraform
+### 3. Initialise
 
 ```bash
 cd infra
 terraform init
 ```
 
----
-
-### 4. Run Terraform Plan
+### 4. Plan & Apply
 
 ```bash
 terraform plan   -var "environment=dev"   -var-file="../environments/dev/terraform.tfvars"
-```
 
----
-
-### 5. Apply the Configuration
-
-```bash
 terraform apply   -var "environment=dev"   -var-file="../environments/dev/terraform.tfvars"
 ```
 
@@ -167,37 +153,99 @@ kubectl get svc -n litellm
 
 ---
 
-## 🧪 Azure DevOps Pipeline Overview
+## 🧪 Azure DevOps – Terraform Pipeline
 
-- Installs **Terraform 1.14.0**
-- Runs `init`, `validate`, `plan`
-- Applies automatically on `main`
-
-Terraform version variable:
+The Terraform pipeline (e.g. `devops/azure-pipelines.yml`) uses:
 
 ```yaml
-TF_VERSION: 1.14.0
+variables:
+  TF_VERSION: 1.14.0
 ```
+
+and runs:
+
+- `terraform init`
+- `terraform validate`
+- `terraform plan`
+- `terraform apply` (on main)
+
+---
+
+## 🟢 Using OpenTofu with the Same Templates
+
+The HCL templates in this repo are also compatible with **OpenTofu**.
+
+### 1. Install OpenTofu
+
+Example (Linux):
+
+```bash
+TOFU_VERSION=1.8.0   # or your chosen version
+wget https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_amd64.zip
+unzip tofu_${TOFU_VERSION}_linux_amd64.zip
+sudo mv tofu /usr/local/bin/
+
+tofu version
+```
+
+### 2. Adjust `required_version` (optional but recommended)
+
+`infra/backend.tf` currently pins:
+
+```hcl
+required_version = "= 1.14.0"
+```
+
+For a pure OpenTofu setup, you can change this to match your OpenTofu version, for example:
+
+```hcl
+required_version = "= 1.8.0"
+```
+
+> If you want to support **both** Terraform and OpenTofu from the same branch, you can relax this to a range (e.g. `>= 1.8.0`) and control which binary you use via your tooling.
+
+### 3. Run OpenTofu Commands
+
+```bash
+cd infra
+tofu init
+
+tofu plan   -var "environment=dev"   -var-file="../environments/dev/terraform.tfvars"
+
+tofu apply   -var "environment=dev"   -var-file="../environments/dev/terraform.tfvars"
+```
+
+---
+
+## 🧪 Azure DevOps – OpenTofu Pipeline
+
+A separate pipeline file (e.g. `devops/azure-pipelines-tofu.yml`) can be used to run OpenTofu:
+
+- Installs OpenTofu
+- Runs `tofu init`, `tofu validate` (via `tofu plan`), `tofu plan`, `tofu apply`
+
+See `devops/azure-pipelines-tofu.yml` for a complete example.
 
 ---
 
 ## 🛡 ISM Protection Alignment
 
 - No public workloads  
-- Mandatory encryption  
-- Centralised audit  
-- Segregated network tiers  
-- Strict identity + SCP guardrails  
+- Mandatory encryption for state, logs, and S3  
+- Centralised CloudTrail + Flow Logs + GuardDuty  
+- Segregated network tiers (shared vs app subnets)  
+- SCPs to block non-compliant S3 usage  
+- Strict, reproducible version locking (Terraform) with optional OpenTofu path
 
 ---
 
 ## 📘 Extend This Platform
 
-- Add ALB ingress (internal)  
-- Add IRSA  
-- Add Network Policies  
-- Add Checkov/TFSec  
-- Add KMS encryption for secrets  
+- Add internal ALB ingress via AWS Load Balancer Controller  
+- Introduce IRSA for pods accessing AWS APIs  
+- Calico/Cilium Network Policies  
+- Add Checkov/TFSec/OPA into pipelines  
+- KMS-backed encryption for EKS secrets and additional log groups  
 
 ---
 
